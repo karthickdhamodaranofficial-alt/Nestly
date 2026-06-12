@@ -18,7 +18,7 @@ class AiChatScreen extends StatefulWidget {
   State<AiChatScreen> createState() => _AiChatScreenState();
 }
 
-class _AiChatScreenState extends State<AiChatScreen> {
+class _AiChatScreenState extends State<AiChatScreen> with TickerProviderStateMixin {
   final AiService _aiService = AiService();
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _inputController = TextEditingController();
@@ -28,10 +28,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
   bool _isRecording = false;
   bool _showSettings = false;
   bool _showFacts = false;
+  String _streamingText = '';
+
+  late AnimationController _dotsController;
 
   String _apiKey = '';
 
-  final List<String> _quickPrompts = [
+  // Suggested follow-ups
+  final List<String> _suggestedReplies = [
     "What should I focus on today?",
     "What am I forgetting?",
     "What can I prep tonight?",
@@ -42,6 +46,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
   void initState() {
     super.initState();
     _loadApiKey();
+
+    _dotsController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat();
 
     // Welcome message
     _messages.add(NestlyMessage(
@@ -55,6 +64,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
   void dispose() {
     _scrollController.dispose();
     _inputController.dispose();
+    _dotsController.dispose();
     super.dispose();
   }
 
@@ -97,17 +107,28 @@ class _AiChatScreenState extends State<AiChatScreen> {
         text: cleanText,
       ));
       _loading = true;
+      _streamingText = '';
     });
+    _inputController.clear();
     _scrollToBottom();
 
     try {
       final response = await _aiService.askGemini(cleanText, widget.profile, _apiKey);
+      // Simulate streaming by revealing chars progressively
+      for (int i = 0; i <= response.length; i += 3) {
+        if (!mounted) break;
+        await Future.delayed(const Duration(milliseconds: 12));
+        setState(() => _streamingText = response.substring(0, i.clamp(0, response.length)));
+        _scrollToBottom();
+      }
       setState(() {
+        _streamingText = response;
         _messages.add(NestlyMessage(
           id: 'a-${DateTime.now().millisecondsSinceEpoch}',
           sender: 'assistant',
           text: response,
         ));
+        _streamingText = '';
       });
     } catch (_) {
       setState(() {
@@ -288,9 +309,57 @@ class _AiChatScreenState extends State<AiChatScreen> {
     return ListView.builder(
       controller: _scrollController,
       physics: const BouncingScrollPhysics(),
-      itemCount: _messages.length + (_loading ? 1 : 0),
+      itemCount: _messages.length + (_loading ? 1 : 0) + (_streamingText.isNotEmpty ? 1 : 0),
       itemBuilder: (context, index) {
-        if (index == _messages.length) {
+        // Streaming bubble shown before the thinking loader
+        if (_streamingText.isNotEmpty && index == _messages.length) {
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    width: 30, height: 30,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [NestlyColors.accentSoft, NestlyColors.sageSoft]),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: NestlyColors.accent.withOpacity(0.2)),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text('🪩', style: TextStyle(fontSize: 14)),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.88),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(20), topRight: Radius.circular(20),
+                          bottomRight: Radius.circular(20), bottomLeft: Radius.circular(4),
+                        ),
+                        border: Border.all(color: Colors.white.withOpacity(0.6)),
+                        boxShadow: NestlyTheme.shadowSm,
+                      ),
+                      child: Text(
+                        _streamingText,
+                        style: const TextStyle(
+                          fontFamily: NestlyTheme.fontSans, fontSize: 13.5,
+                          color: NestlyColors.textMain, height: 1.55,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        if (index == _messages.length + (_streamingText.isNotEmpty ? 1 : 0)) {
           return _buildThinkingLoader();
         }
 
@@ -392,19 +461,21 @@ class _AiChatScreenState extends State<AiChatScreen> {
       alignment: Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.85),
-          borderRadius: BorderRadius.circular(16),
+          color: Colors.white.withOpacity(0.88),
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20), topRight: Radius.circular(20),
+            bottomRight: Radius.circular(20), bottomLeft: Radius.circular(4),
+          ),
           border: Border.all(color: Colors.white.withOpacity(0.6)),
           boxShadow: NestlyTheme.shadowSm,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Thinking', style: TextStyle(color: NestlyColors.textMuted, fontSize: 11.5)),
-            const SizedBox(width: 8),
-            // Loading dots
+            Text('Thinking', style: NestlyTheme.caption(color: NestlyColors.textMuted, fontSize: 11.5)),
+            const SizedBox(width: 10),
             _buildBouncingDot(0),
             _buildBouncingDot(1),
             _buildBouncingDot(2),
@@ -415,14 +486,25 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 
   Widget _buildBouncingDot(int index) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 1.5),
-      width: 5,
-      height: 5,
-      decoration: const BoxDecoration(
-        color: NestlyColors.primary,
-        shape: BoxShape.circle,
-      ),
+    return AnimatedBuilder(
+      animation: _dotsController,
+      builder: (_, __) {
+        final offset = ((_dotsController.value * 3 - index).clamp(0.0, 1.0));
+        final bounce = offset < 0.5 ? offset * 2 : (1 - offset) * 2;
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          child: Transform.translate(
+            offset: Offset(0, -5 * bounce),
+            child: Container(
+              width: 6, height: 6,
+              decoration: const BoxDecoration(
+                color: NestlyColors.primary,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

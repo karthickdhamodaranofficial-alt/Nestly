@@ -19,12 +19,12 @@ class PlanScreen extends StatefulWidget {
 
 class _PlanScreenState extends State<PlanScreen> {
   final DbService _db = DbService();
-  String _activeTab = 'tasks'; // 'tasks' or 'calendar'
+  String _activeTab = 'tasks';
 
   // Task state
   List<HouseholdTask> _tasks = [];
   String _taskSearchQuery = '';
-  String _taskCategoryFilter = 'All';
+  String _taskFilter = 'All'; // 'All', 'Today', 'High', 'Mine'
 
   // Calendar state
   List<CalendarEvent> _events = [];
@@ -322,10 +322,15 @@ class _PlanScreenState extends State<PlanScreen> {
 
   // --- TASKS TAB VIEW ---
   Widget _buildTasksTab() {
+    final today = DateTime.now().toIso8601String().split('T')[0];
     final filtered = _tasks.where((t) {
-      final matchesCat = _taskCategoryFilter == 'All' || t.category == _taskCategoryFilter;
-      final matchesSearch = _taskSearchQuery.isEmpty || t.title.toLowerCase().contains(_taskSearchQuery.toLowerCase());
-      return matchesCat && matchesSearch;
+      final matchesSearch = _taskSearchQuery.isEmpty ||
+          t.title.toLowerCase().contains(_taskSearchQuery.toLowerCase());
+      bool matchesFilter = true;
+      if (_taskFilter == 'Today') matchesFilter = t.dueDate == today;
+      if (_taskFilter == 'High') matchesFilter = t.priority == 'High';
+      if (_taskFilter == 'Mine') matchesFilter = t.assignee == widget.user.role;
+      return matchesFilter && matchesSearch;
     }).toList();
 
     final doneCount = filtered.where((t) => t.done).length;
@@ -355,56 +360,69 @@ class _PlanScreenState extends State<PlanScreen> {
         ),
         const SizedBox(height: 10),
 
-        // Categories filters row
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: ['All', 'Home', 'Kids', 'Meals'].map((c) {
-                    final isSelected = _taskCategoryFilter == c;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 6.0),
-                      child: GestureDetector(
-                        onTap: () => setState(() => _taskCategoryFilter = c),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: isSelected ? NestlyColors.primaryDark : NestlyColors.bgCard,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: isSelected ? NestlyTheme.shadowXs : null,
-                          ),
-                          child: Text(
-                            c,
+        // Filter chips
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: [
+              ...[  
+                {'label': 'All', 'icon': Icons.list},
+                {'label': 'Today', 'icon': Icons.today_outlined},
+                {'label': 'High', 'icon': Icons.priority_high},
+                {'label': 'Mine', 'icon': Icons.person_outline},
+              ].map((f) {
+                final isSelected = _taskFilter == f['label'];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _taskFilter = f['label'] as String),
+                    child: AnimatedContainer(
+                      duration: NestlyTheme.transitionFast,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: isSelected ? NestlyColors.primaryDark : NestlyColors.bgCard,
+                        borderRadius: BorderRadius.circular(NestlyTheme.radiusFull),
+                        border: Border.all(
+                          color: isSelected ? Colors.transparent : NestlyColors.border,
+                          width: 1.5,
+                        ),
+                        boxShadow: isSelected ? NestlyTheme.shadowXs : null,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(f['icon'] as IconData, size: 12,
+                            color: isSelected ? Colors.white : NestlyColors.textMuted),
+                          const SizedBox(width: 5),
+                          Text(
+                            f['label'] as String,
                             style: TextStyle(
-                              fontFamily: NestlyTheme.fontSans,
-                              fontSize: 11.0,
+                              fontFamily: NestlyTheme.fontSans, fontSize: 11.5,
                               fontWeight: FontWeight.bold,
                               color: isSelected ? Colors.white : NestlyColors.textMuted,
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                    );
-                  }).toList(),
+                    ),
+                  ),
+                );
+              }),
+              if (filtered.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: NestlyColors.sageSoft,
+                    borderRadius: BorderRadius.circular(NestlyTheme.radiusFull),
+                  ),
+                  child: Text(
+                    '$doneCount/${filtered.length} ✓',
+                    style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 11, fontWeight: FontWeight.bold, color: NestlyColors.sageDark),
+                  ),
                 ),
-              ),
-            ),
-            if (filtered.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                decoration: BoxDecoration(
-                  color: NestlyColors.sageSoft,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: Text(
-                  '$doneCount/${filtered.length} ✓',
-                  style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 11, fontWeight: FontWeight.bold, color: NestlyColors.sageDark),
-                ),
-              )
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 14),
 
@@ -412,8 +430,7 @@ class _PlanScreenState extends State<PlanScreen> {
         Expanded(
           child: filtered.isEmpty
               ? _buildEmptyState('✅', _taskSearchQuery.isNotEmpty ? 'No tasks match.' : 'Tap + Add Task to get started.')
-              : ListView.builder(
-                  physics: const BouncingScrollPhysics(),
+              : ListView.bui                   physics: const BouncingScrollPhysics(),
                   itemCount: filtered.length,
                   itemBuilder: (context, index) {
                     final task = filtered[index];
@@ -421,128 +438,154 @@ class _PlanScreenState extends State<PlanScreen> {
                     final pb = _priorityBgs[task.priority] ?? _priorityBgs['Medium']!;
                     final pt = _priorityTexts[task.priority] ?? _priorityTexts['Medium']!;
 
-                    return Opacity(
-                      opacity: task.done ? 0.55 : 1.0,
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 9.0),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+                    return Dismissible(
+                      key: Key(task.id),
+                      direction: DismissDirection.horizontal,
+                      background: Container(
+                        margin: const EdgeInsets.only(bottom: 9),
                         decoration: BoxDecoration(
-                          color: NestlyColors.bgCard.withOpacity(0.88),
+                          color: NestlyColors.sage,
                           borderRadius: BorderRadius.circular(18),
-                          border: Border(
-                            left: BorderSide(color: pc, width: 3.5),
-                            top: const BorderSide(color: NestlyColors.border),
-                            right: const BorderSide(color: NestlyColors.border),
-                            bottom: const BorderSide(color: NestlyColors.border),
-                          ),
-                          boxShadow: NestlyTheme.shadowXs,
                         ),
-                        child: Row(
-                          alignment: Alignment.start,
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: const Row(
                           children: [
-                            GestureDetector(
-                              onTap: () => _handleToggleTask(task),
-                              child: Padding(
-                                padding: const EdgeInsets.only(top: 1.0),
-                                child: Icon(
-                                  task.done ? Icons.check_circle : Icons.circle_outlined,
-                                  color: task.done ? NestlyColors.sage : NestlyColors.borderStrong,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => _showTaskFormSheet(task),
-                                behavior: HitTestBehavior.opaque,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      task.title,
-                                      style: TextStyle(
-                                        fontFamily: NestlyTheme.fontSans,
-                                        fontSize: 13.5,
-                                        fontWeight: task.priority == 'High' ? FontWeight.bold : FontWeight.w500,
-                                        color: task.done ? NestlyColors.textSubtle : NestlyColors.textMain,
-                                        decoration: task.done ? TextDecoration.lineThrough : null,
-                                        height: 1.4,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 5),
-                                    Wrap(
-                                      spacing: 5,
-                                      runSpacing: 5,
-                                      alignment: WrapAlignment.start,
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: pb,
-                                            borderRadius: BorderRadius.circular(99),
-                                          ),
-                                          child: Text(
-                                            task.priority,
-                                            style: TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 10, fontWeight: FontWeight.bold, color: pt),
-                                          ),
-                                        ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: NestlyColors.bgBase,
-                                            borderRadius: BorderRadius.circular(99),
-                                            border: Border.all(color: NestlyColors.border),
-                                          ),
-                                          child: Text(
-                                            task.category,
-                                            style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 10, fontWeight: FontWeight.bold, color: NestlyColors.textMuted),
-                                          ),
-                                        ),
-                                        Text(
-                                          '· ${task.assignee}',
-                                          style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 10, color: NestlyColors.textSubtle, fontWeight: FontWeight.w500),
-                                        ),
-                                        if (task.recurring.isNotEmpty && task.recurring != 'None')
-                                          Text(
-                                            '↻ ${task.recurring}',
-                                            style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 10, color: NestlyColors.sageDark, fontWeight: FontWeight.bold),
-                                          )
-                                      ],
-                                    ),
-                                    if (task.notes.isNotEmpty) ...[
-                                      const SizedBox(height: 5),
-                                      Text(
-                                        task.notes,
-                                        style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 11, color: NestlyColors.textSubtle, fontStyle: FontStyle.italic, height: 1.4),
-                                      )
-                                    ]
-                                  ],
-                                ),
-                              ),
-                            ),
-                            Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit_outlined, size: 13, color: NestlyColors.textSubtle),
-                                  onPressed: () => _showTaskFormSheet(task),
-                                  padding: const EdgeInsets.all(5),
-                                  constraints: const BoxConstraints(),
-                                ),
-                                const SizedBox(height: 4),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 13, color: NestlyColors.danger),
-                                  onPressed: () => _db.deleteTask(task.id),
-                                  padding: const EdgeInsets.all(5),
-                                  constraints: const BoxConstraints(),
-                                ),
-                              ],
-                            )
+                            Icon(Icons.check_circle, color: Colors.white, size: 20),
+                            SizedBox(width: 8),
+                            Text('Complete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                           ],
                         ),
                       ),
-                    );
+                      secondaryBackground: Container(
+                        margin: const EdgeInsets.only(bottom: 9),
+                        decoration: BoxDecoration(
+                          color: NestlyColors.danger,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                            SizedBox(width: 8),
+                            Icon(Icons.delete_outline, color: Colors.white, size: 20),
+                          ],
+                        ),
+                      ),
+                      confirmDismiss: (dir) async {
+                        if (dir == DismissDirection.startToEnd) {
+                          _handleToggleTask(task);
+                          return false; // don't remove, just toggle
+                        } else {
+                          _db.deleteTask(task.id);
+                          return false;
+                        }
+                      },
+                      child: AnimatedOpacity(
+                        duration: NestlyTheme.transitionSmooth,
+                        opacity: task.done ? 0.55 : 1.0,
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 9.0),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+                          decoration: BoxDecoration(
+                            color: NestlyColors.bgCard,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border(
+                              left: BorderSide(color: pc, width: 3.5),
+                              top: const BorderSide(color: NestlyColors.border),
+                              right: const BorderSide(color: NestlyColors.border),
+                              bottom: const BorderSide(color: NestlyColors.border),
+                            ),
+                            boxShadow: NestlyTheme.shadowXs,
+                          ),
+                          child: Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () => _handleToggleTask(task),
+                                child: AnimatedSwitcher(
+                                  duration: NestlyTheme.transitionFast,
+                                  child: Icon(
+                                    task.done ? Icons.check_circle : Icons.circle_outlined,
+                                    key: ValueKey(task.done),
+                                    color: task.done ? NestlyColors.sage : NestlyColors.borderStrong,
+                                    size: 22,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => _showTaskFormSheet(task),
+                                  behavior: HitTestBehavior.opaque,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        task.title,
+                                        style: TextStyle(
+                                          fontFamily: NestlyTheme.fontSans,
+                                          fontSize: 13.5,
+                                          fontWeight: task.priority == 'High' ? FontWeight.bold : FontWeight.w500,
+                                          color: task.done ? NestlyColors.textSubtle : NestlyColors.textMain,
+                                          decoration: task.done ? TextDecoration.lineThrough : null,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 5),
+                                      Wrap(
+                                        spacing: 5, runSpacing: 4,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: pb,
+                                              borderRadius: BorderRadius.circular(NestlyTheme.radiusFull),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                if (task.priority == 'High')
+                                                  const Icon(Icons.arrow_upward, size: 9, color: Color(0xFF9A5A1A)),
+                                                if (task.priority == 'Low')
+                                                  const Icon(Icons.arrow_downward, size: 9, color: Color(0xFF4E6B4A)),
+                                                SizedBox(width: task.priority == 'Medium' ? 0 : 3),
+                                                Text(task.priority, style: TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 10, fontWeight: FontWeight.bold, color: pt)),
+                                              ],
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: NestlyColors.bgBase,
+                                              borderRadius: BorderRadius.circular(NestlyTheme.radiusFull),
+                                              border: Border.all(color: NestlyColors.border),
+                                            ),
+                                            child: Text(task.category, style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 10, fontWeight: FontWeight.bold, color: NestlyColors.textMuted)),
+                                          ),
+                                          Text('· ${task.assignee}',
+                                            style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 10, color: NestlyColors.textSubtle, fontWeight: FontWeight.w500)),
+                                          if (task.recurring.isNotEmpty && task.recurring != 'None')
+                                            Text('↻ ${task.recurring}',
+                                              style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 10, color: NestlyColors.sageDark, fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined, size: 14, color: NestlyColors.textSubtle),
+                                onPressed: () => _showTaskFormSheet(task),
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );       );
                   },
                 ),
         )

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'theme/nestly_theme.dart';
 import 'models/models.dart';
 import 'services/db_service.dart';
@@ -13,7 +14,22 @@ import 'screens/simplify_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
+  // Lock to portrait + landscape (allow all orientations)
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
+
+  // Status bar styling
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+    systemNavigationBarColor: Color(0xFFFAF8F4),
+    systemNavigationBarIconBrightness: Brightness.dark,
+  ));
+
   final db = DbService();
   await db.init();
 
@@ -35,14 +51,49 @@ class NestlyApp extends StatelessWidget {
           seedColor: NestlyColors.primary,
           primary: NestlyColors.primary,
           secondary: NestlyColors.secondary,
+          surface: NestlyColors.bgCard,
+          background: NestlyColors.bgBase,
         ),
         useMaterial3: true,
+        splashFactory: InkRipple.splashFactory,
+        highlightColor: Colors.transparent,
+        dividerColor: NestlyColors.border,
+        textSelectionTheme: const TextSelectionThemeData(
+          cursorColor: NestlyColors.primary,
+          selectionColor: Color(0x337D6B5D),
+          selectionHandleColor: NestlyColors.primary,
+        ),
+        checkboxTheme: CheckboxThemeData(
+          fillColor: MaterialStateProperty.resolveWith((states) {
+            if (states.contains(MaterialState.selected)) return NestlyColors.sage;
+            return Colors.transparent;
+          }),
+          side: const BorderSide(color: NestlyColors.borderStrong, width: 1.5),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+        ),
       ),
       home: const NestlyAppContainer(),
     );
   }
 }
 
+// ─── Tab definition ───────────────────────────────────────────────────────────
+class _TabDef {
+  final String id;
+  final IconData icon;
+  final IconData iconFilled;
+  final String label;
+  const _TabDef(this.id, this.icon, this.iconFilled, this.label);
+}
+
+const _tabs = [
+  _TabDef('dashboard', Icons.home_outlined, Icons.home_rounded, 'Home'),
+  _TabDef('plan', Icons.checklist_outlined, Icons.checklist_rtl_rounded, 'Plan'),
+  _TabDef('meals', Icons.restaurant_menu_outlined, Icons.restaurant_menu, 'Meals'),
+  _TabDef('chat', Icons.auto_awesome_outlined, Icons.auto_awesome, 'AI'),
+];
+
+// ─── App Container ────────────────────────────────────────────────────────────
 class NestlyAppContainer extends StatefulWidget {
   const NestlyAppContainer({super.key});
 
@@ -50,21 +101,26 @@ class NestlyAppContainer extends StatefulWidget {
   State<NestlyAppContainer> createState() => _NestlyAppContainerState();
 }
 
-class _NestlyAppContainerState extends State<NestlyAppContainer> {
+class _NestlyAppContainerState extends State<NestlyAppContainer>
+    with SingleTickerProviderStateMixin {
   final DbService _db = DbService();
   String _activeTab = 'dashboard';
   bool _simplifyMode = false;
   String? _syncToastMessage;
 
+  late AnimationController _tabAnimController;
+
   @override
   void initState() {
     super.initState();
-    
-    // Start listening to databases
+
+    _tabAnimController = AnimationController(
+      vsync: this,
+      duration: NestlyTheme.transitionSmooth,
+    );
+
     _db.userNotifier.addListener(_onStateChanged);
     _db.profileNotifier.addListener(_onStateChanged);
-
-    // Initial check to start simulation
     _checkSimulation();
   }
 
@@ -72,6 +128,7 @@ class _NestlyAppContainerState extends State<NestlyAppContainer> {
   void dispose() {
     _db.userNotifier.removeListener(_onStateChanged);
     _db.profileNotifier.removeListener(_onStateChanged);
+    _tabAnimController.dispose();
     CoparentSimulation.stop();
     super.dispose();
   }
@@ -90,15 +147,10 @@ class _NestlyAppContainerState extends State<NestlyAppContainer> {
     if (user != null && profile != null && profile.onboarded) {
       CoparentSimulation.start(_db, (message) {
         if (mounted) {
-          setState(() {
-            _syncToastMessage = message;
-          });
-          // Dismiss toast after 4 seconds
-          Future.delayed(const Duration(seconds: 4), () {
+          setState(() => _syncToastMessage = message);
+          Future.delayed(const Duration(seconds: 5), () {
             if (mounted && _syncToastMessage == message) {
-              setState(() {
-                _syncToastMessage = null;
-              });
+              setState(() => _syncToastMessage = null);
             }
           });
         }
@@ -109,15 +161,15 @@ class _NestlyAppContainerState extends State<NestlyAppContainer> {
   }
 
   void _handleTabSelect(String tabId) {
-    setState(() {
-      _activeTab = tabId;
-    });
+    if (tabId == _activeTab) return;
+    HapticFeedback.selectionClick();
+    setState(() => _activeTab = tabId);
+    _tabAnimController.forward(from: 0);
   }
 
   void _handleToggleSimplify() {
-    setState(() {
-      _simplifyMode = !_simplifyMode;
-    });
+    HapticFeedback.mediumImpact();
+    setState(() => _simplifyMode = !_simplifyMode);
   }
 
   @override
@@ -129,14 +181,12 @@ class _NestlyAppContainerState extends State<NestlyAppContainer> {
       backgroundColor: NestlyColors.bgBase,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final isWide = constraints.maxWidth >= 768; // Tablet breakpoint
+          final isWide = constraints.maxWidth >= 768;
 
           Widget mainWidget;
 
           if (user == null) {
-            mainWidget = AuthScreen(
-              onAuthComplete: (u) => _db.saveUser(u),
-            );
+            mainWidget = AuthScreen(onAuthComplete: (u) => _db.saveUser(u));
           } else if (profile == null || !profile.onboarded) {
             mainWidget = OnboardingScreen(
               user: user,
@@ -154,7 +204,35 @@ class _NestlyAppContainerState extends State<NestlyAppContainer> {
 
           return Stack(
             children: [
-              mainWidget,
+              // Animated page switcher
+              AnimatedSwitcher(
+                duration: NestlyTheme.transitionSmooth,
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0.02, 0),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  );
+                },
+                child: KeyedSubtree(
+                  key: ValueKey(_simplifyMode
+                      ? 'simplify'
+                      : user == null
+                          ? 'auth'
+                          : profile == null || !profile.onboarded
+                              ? 'onboarding'
+                              : _activeTab),
+                  child: mainWidget,
+                ),
+              ),
+              // Sync toast overlay
               if (_syncToastMessage != null) _buildSyncToast(_syncToastMessage!),
             ],
           );
@@ -163,7 +241,9 @@ class _NestlyAppContainerState extends State<NestlyAppContainer> {
     );
   }
 
-  Widget _buildResponsiveScaffold(NestlyUser user, OnboardingProfile profile, bool isWide) {
+  // ─── Responsive Shell ───────────────────────────────────────────────────────
+  Widget _buildResponsiveScaffold(
+      NestlyUser user, OnboardingProfile profile, bool isWide) {
     Widget activeView;
     switch (_activeTab) {
       case 'dashboard':
@@ -192,146 +272,252 @@ class _NestlyAppContainerState extends State<NestlyAppContainer> {
         );
     }
 
-    final isSimplify = _simplifyMode;
-    final primaryColor = NestlyColors.getPrimary(isSimplify);
-    final textMuted = NestlyColors.getTextMuted(isSimplify);
-    final bgCard = NestlyColors.getBgCard(isSimplify);
-    final border = NestlyColors.getBorder(isSimplify);
-
     if (isWide) {
-      // Tablet / Desktop Layout using NavigationRail
-      return Scaffold(
-        backgroundColor: NestlyColors.getBgBase(isSimplify),
-        body: Row(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                border: Border(right: BorderSide(color: border, width: 1.0)),
-              ),
-              child: NavigationRail(
-                backgroundColor: bgCard.withOpacity(0.95),
-                selectedIndex: ['dashboard', 'plan', 'meals', 'chat', 'logout'].indexOf(_activeTab),
-                onDestinationSelected: (int index) {
-                  final tabs = ['dashboard', 'plan', 'meals', 'chat', 'logout'];
-                  if (tabs[index] == 'logout') {
-                    _showLogoutDialog();
-                  } else {
-                    _handleTabSelect(tabs[index]);
-                  }
-                },
-                labelType: NavigationRailLabelType.all,
-                selectedLabelTextStyle: TextStyle(
-                  fontFamily: NestlyTheme.fontSans,
-                  fontSize: 11.0,
-                  fontWeight: FontWeight.w700,
-                  color: primaryColor,
-                  letterSpacing: -0.01,
-                ),
-                unselectedLabelTextStyle: TextStyle(
-                  fontFamily: NestlyTheme.fontSans,
-                  fontSize: 11.0,
-                  fontWeight: FontWeight.w500,
-                  color: textMuted,
-                  letterSpacing: -0.01,
-                ),
-                selectedIconTheme: IconThemeData(color: primaryColor, size: 24),
-                unselectedIconTheme: IconThemeData(color: textMuted, size: 24),
-                destinations: const [
-                  NavigationRailDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: Text('Home')),
-                  NavigationRailDestination(icon: Icon(Icons.playlist_add_check), selectedIcon: Icon(Icons.playlist_add_check), label: Text('Plan')),
-                  NavigationRailDestination(icon: Icon(Icons.restaurant_outlined), selectedIcon: Icon(Icons.restaurant), label: Text('Meals')),
-                  NavigationRailDestination(icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome), label: Text('AI')),
-                  NavigationRailDestination(icon: Icon(Icons.logout_outlined), selectedIcon: Icon(Icons.logout), label: Text('Reset')),
-                ],
-              ),
-            ),
-            Expanded(
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
-                  child: activeView,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildWideLayout(user, profile, activeView);
     } else {
-      // Mobile Layout using BottomNavigationBar
-      return Scaffold(
-        backgroundColor: NestlyColors.getBgBase(isSimplify),
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 12.0),
-            child: activeView,
-          ),
-        ),
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            color: bgCard.withOpacity(0.95),
-            border: Border(top: BorderSide(color: border, width: 1.0)),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: SafeArea(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem('dashboard', Icons.home_outlined, Icons.home, 'Home', primaryColor, textMuted),
-                _buildNavItem('plan', Icons.playlist_add_check, Icons.playlist_add_check, 'Plan', primaryColor, textMuted),
-                _buildNavItem('meals', Icons.restaurant_outlined, Icons.restaurant, 'Meals', primaryColor, textMuted),
-                _buildNavItem('chat', Icons.auto_awesome_outlined, Icons.auto_awesome, 'AI', primaryColor, textMuted),
-                _buildNavItem('logout', Icons.logout_outlined, Icons.logout, 'Reset', primaryColor, textMuted),
-              ],
-            ),
-          ),
-        ),
-      );
+      return _buildMobileLayout(profile, activeView);
     }
   }
 
-
-
-  Widget _buildNavItem(
-    String tabId,
-    IconData inactiveIcon,
-    IconData activeIcon,
-    String label,
-    Color activeColor,
-    Color inactiveColor,
-  ) {
-    final isSelected = _activeTab == tabId;
-    return GestureDetector(
-      onTap: () {
-        if (tabId == 'logout') {
-          _showLogoutDialog();
-        } else {
-          _handleTabSelect(tabId);
-        }
-      },
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedScale(
-              scale: isSelected ? 1.15 : 1.0,
-              duration: NestlyTheme.transitionFast,
-              child: Icon(
-                isSelected ? activeIcon : inactiveIcon,
-                color: isSelected ? activeColor : inactiveColor,
-                size: 22.0,
+  // ─── Wide (Tablet/Desktop) Layout ──────────────────────────────────────────
+  Widget _buildWideLayout(
+      NestlyUser user, OnboardingProfile profile, Widget activeView) {
+    return Scaffold(
+      backgroundColor: NestlyColors.bgBase,
+      body: Row(
+        children: [
+          // Sidebar
+          _buildSidebar(user, profile),
+          // Main content
+          Expanded(
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 28.0, vertical: 28.0),
+                child: activeView,
               ),
             ),
-            const SizedBox(height: 4.0),
-            Text(
-              label,
-              style: TextStyle(
-                fontFamily: NestlyTheme.fontSans,
-                fontSize: 10.0,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? activeColor : inactiveColor,
-                letterSpacing: -0.01,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebar(NestlyUser user, OnboardingProfile profile) {
+    return Container(
+      width: 220,
+      decoration: BoxDecoration(
+        color: NestlyColors.bgCard,
+        border: Border(
+          right: BorderSide(color: NestlyColors.border, width: 1.0),
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x08000000),
+            blurRadius: 16,
+            offset: Offset(4, 0),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Logo area
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+              child: Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      gradient: NestlyGradients.warmSunrise,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: NestlyColors.accentSoft.withOpacity(0.5)),
+                      boxShadow: NestlyTheme.shadowXs,
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text('🪹', style: TextStyle(fontSize: 20)),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Nestly',
+                          style: NestlyTheme.serifHeading(fontSize: 18)),
+                      Text(
+                        'Household COO',
+                        style: NestlyTheme.caption(
+                            color: NestlyColors.textSubtle, fontSize: 10),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // User info
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: NestlyColors.bgMuted,
+                  borderRadius: BorderRadius.circular(NestlyTheme.radiusMd),
+                  border: Border.all(color: NestlyColors.border),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        gradient: NestlyGradients.sageGlow,
+                        shape: BoxShape.circle,
+                        border:
+                            Border.all(color: NestlyColors.sageMid, width: 1.5),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        user.name.isNotEmpty
+                            ? user.name[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                          fontFamily: NestlyTheme.fontSans,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: NestlyColors.sageDark,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.name,
+                            style: const TextStyle(
+                              fontFamily: NestlyTheme.fontSans,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.bold,
+                              color: NestlyColors.primaryDark,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            user.role,
+                            style: NestlyTheme.caption(fontSize: 10.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Divider(color: NestlyColors.border, height: 1),
+            ),
+            const SizedBox(height: 12),
+
+            // Nav items
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('NAVIGATION',
+                        style: NestlyTheme.labelCaps(fontSize: 9)),
+                    const SizedBox(height: 8),
+                    ..._tabs.map((tab) => _buildSidebarItem(tab)),
+                  ],
+                ),
+              ),
+            ),
+
+            // Bottom actions
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                children: [
+                  // Simplify mode toggle
+                  GestureDetector(
+                    onTap: _handleToggleSimplify,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 11),
+                      decoration: BoxDecoration(
+                        gradient: NestlyGradients.sageGlow,
+                        borderRadius:
+                            BorderRadius.circular(NestlyTheme.radiusMd),
+                        border: Border.all(
+                            color: NestlyColors.sage.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.spa,
+                              size: 14, color: NestlyColors.sageDark),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Simplify Mode',
+                              style: TextStyle(
+                                fontFamily: NestlyTheme.fontSans,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: NestlyColors.sageDark,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: NestlyColors.sage,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Reset button
+                  GestureDetector(
+                    onTap: _showLogoutDialog,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 11),
+                      decoration: BoxDecoration(
+                        color: NestlyColors.bgMuted,
+                        borderRadius:
+                            BorderRadius.circular(NestlyTheme.radiusMd),
+                        border: Border.all(color: NestlyColors.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.logout,
+                              size: 14,
+                              color: NestlyColors.textMuted.withOpacity(0.7)),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Reset App Data',
+                            style: NestlyTheme.caption(
+                                fontSize: 11.5,
+                                color: NestlyColors.textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -340,87 +526,271 @@ class _NestlyAppContainerState extends State<NestlyAppContainer> {
     );
   }
 
-  void _showLogoutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(NestlyTheme.radiusMd)),
-          backgroundColor: NestlyColors.bgCard,
-          title: Text('Reset App Data?', style: NestlyTheme.serifHeading(fontSize: 18)),
-          content: Text(
-            'This will clear your local household profile, task history, and log you out. Proceed?',
-            style: NestlyTheme.sansBody(fontSize: 13, color: NestlyColors.textBody),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Cancel', style: TextStyle(color: NestlyColors.textMuted, fontFamily: NestlyTheme.fontSans, fontWeight: FontWeight.w600)),
+  Widget _buildSidebarItem(_TabDef tab) {
+    final isSelected = _activeTab == tab.id;
+    return GestureDetector(
+      onTap: () => _handleTabSelect(tab.id),
+      child: AnimatedContainer(
+        duration: NestlyTheme.transitionSmooth,
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? NestlyColors.primaryDark
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(NestlyTheme.radiusMd),
+          boxShadow: isSelected ? NestlyTheme.shadowXs : null,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isSelected ? tab.iconFilled : tab.icon,
+              size: 18,
+              color: isSelected ? Colors.white : NestlyColors.textMuted,
             ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _db.logout();
-                setState(() {
-                  _activeTab = 'dashboard';
-                  _simplifyMode = false;
-                });
-              },
-              child: const Text('Reset', style: TextStyle(color: NestlyColors.danger, fontFamily: NestlyTheme.fontSans, fontWeight: FontWeight.bold)),
+            const SizedBox(width: 10),
+            Text(
+              tab.label,
+              style: TextStyle(
+                fontFamily: NestlyTheme.fontSans,
+                fontSize: 13,
+                fontWeight:
+                    isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? Colors.white : NestlyColors.textMuted,
+              ),
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 
+  // ─── Mobile Layout ─────────────────────────────────────────────────────────
+  Widget _buildMobileLayout(OnboardingProfile profile, Widget activeView) {
+    return Scaffold(
+      backgroundColor: NestlyColors.bgBase,
+      body: SafeArea(
+        child: Padding(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 18.0, vertical: 12.0),
+          child: activeView,
+        ),
+      ),
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildBottomNav() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: NestlyColors.bgCard,
+        border: Border(top: BorderSide(color: NestlyColors.border, width: 1)),
+        boxShadow: [
+          BoxShadow(color: Color(0x0A000000), blurRadius: 20, offset: Offset(0, -4)),
+        ],
+      ),
+      padding: const EdgeInsets.only(top: 6, bottom: 2),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: _tabs.map((tab) => _buildNavItem(tab)).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(_TabDef tab) {
+    final isSelected = _activeTab == tab.id;
+    return GestureDetector(
+      onTap: () => _handleTabSelect(tab.id),
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: NestlyTheme.transitionSmooth,
+              curve: NestlyTheme.curveSmooth,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? NestlyColors.primaryDark.withOpacity(0.1)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(NestlyTheme.radiusFull),
+              ),
+              child: AnimatedScale(
+                scale: isSelected ? 1.1 : 1.0,
+                duration: NestlyTheme.transitionFast,
+                child: Icon(
+                  isSelected ? tab.iconFilled : tab.icon,
+                  color: isSelected
+                      ? NestlyColors.primaryDark
+                      : NestlyColors.textSubtle,
+                  size: 22,
+                ),
+              ),
+            ),
+            const SizedBox(height: 3),
+            AnimatedDefaultTextStyle(
+              duration: NestlyTheme.transitionFast,
+              style: TextStyle(
+                fontFamily: NestlyTheme.fontSans,
+                fontSize: 10,
+                fontWeight:
+                    isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected
+                    ? NestlyColors.primaryDark
+                    : NestlyColors.textSubtle,
+              ),
+              child: Text(tab.label),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Logout Dialog ─────────────────────────────────────────────────────────
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.4),
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(NestlyTheme.radiusLg)),
+        backgroundColor: NestlyColors.bgCard,
+        elevation: 0,
+        title: Column(
+          children: [
+            const Text('⚠️', style: TextStyle(fontSize: 32)),
+            const SizedBox(height: 8),
+            Text('Reset App Data?',
+                style: NestlyTheme.serifHeading(fontSize: 18),
+                textAlign: TextAlign.center),
+          ],
+        ),
+        content: Text(
+          'This will clear your local household profile, task history, and log you out. This action cannot be undone.',
+          style: NestlyTheme.sansBody(fontSize: 13, color: NestlyColors.textBody),
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: NestlyColors.border),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(NestlyTheme.radiusMd)),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: const Text('Cancel',
+                style: TextStyle(
+                    color: NestlyColors.textMuted,
+                    fontFamily: NestlyTheme.fontSans,
+                    fontWeight: FontWeight.w600)),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _db.logout();
+              setState(() {
+                _activeTab = 'dashboard';
+                _simplifyMode = false;
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: NestlyColors.danger,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(NestlyTheme.radiusMd)),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              elevation: 0,
+            ),
+            child: const Text('Reset Everything',
+                style: TextStyle(
+                    fontFamily: NestlyTheme.fontSans,
+                    fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Sync Toast ─────────────────────────────────────────────────────────────
   Widget _buildSyncToast(String message) {
     return Positioned(
-      top: 24,
-      left: 14,
-      right: 14,
+      top: 12,
+      left: 12,
+      right: 12,
       child: SafeArea(
         child: TweenAnimationBuilder<double>(
           tween: Tween(begin: 0.0, end: 1.0),
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOutBack,
+          duration: const Duration(milliseconds: 400),
+          curve: NestlyTheme.curveBounce,
           builder: (context, value, child) {
             return Transform.translate(
-              offset: Offset(0, -20 * (1.0 - value)),
-              child: Opacity(
-                opacity: value,
-                child: child,
-              ),
+              offset: Offset(0, -28 * (1.0 - value)),
+              child: Opacity(opacity: value.clamp(0.0, 1.0), child: child),
             );
           },
           child: Material(
-            elevation: 8,
+            elevation: 12,
             shadowColor: Colors.black26,
             borderRadius: BorderRadius.circular(NestlyTheme.radiusMd),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF3A2E26), Color(0xFF1E1812)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                gradient: NestlyGradients.darkRich,
                 borderRadius: BorderRadius.circular(NestlyTheme.radiusMd),
-                border: Border.all(color: Colors.white10),
+                border: Border.all(color: Colors.white.withOpacity(0.08)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.sync, color: NestlyColors.accent, size: 16),
+                  // Pulsing indicator
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0.7, end: 1.0),
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeInOut,
+                    builder: (_, v, __) => Transform.scale(
+                      scale: v,
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: NestlyColors.sage,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 10),
+                  const Icon(Icons.sync_rounded,
+                      color: NestlyColors.accent, size: 15),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       message,
                       style: const TextStyle(
                         fontFamily: NestlyTheme.fontSans,
-                        fontSize: 12.0,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.w500,
                         color: Color(0xFFF8F3EE),
+                        height: 1.4,
                       ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => setState(() => _syncToastMessage = null),
+                    child: const Padding(
+                      padding: EdgeInsets.only(left: 8),
+                      child: Icon(Icons.close,
+                          size: 13, color: Color(0x80F8F3EE)),
                     ),
                   ),
                 ],

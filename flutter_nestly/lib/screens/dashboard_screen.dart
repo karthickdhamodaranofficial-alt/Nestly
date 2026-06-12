@@ -33,8 +33,10 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
   String _activeTrack = 'Cozy Rainfall';
   List<Map<String, dynamic>> _aiTips = [];
 
-  // Animations for sound waves
   late AnimationController _soundWaveController;
+  late AnimationController _entryController;
+  late Animation<double> _entryFade;
+  late Animation<Offset> _entrySlide;
 
   @override
   void initState() {
@@ -42,22 +44,29 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
 
     _soundWaveController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 1200),
     );
 
-    // Listen to changes in databases
+    _entryController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _entryFade = CurvedAnimation(parent: _entryController, curve: Curves.easeOut);
+    _entrySlide = Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _entryController, curve: Curves.easeOutCubic));
+
     _db.tasksNotifier.addListener(_updateTasks);
     _db.eventsNotifier.addListener(_updateEvents);
     _db.mealsNotifier.addListener(_updateMeals);
     _db.timelineNotifier.addListener(_updateTimeline);
 
-    // Initial load
     _updateTasks();
     _updateEvents();
     _updateMeals();
     _updateTimeline();
 
     _generateAiTips();
+    _entryController.forward();
   }
 
   @override
@@ -67,6 +76,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     _db.mealsNotifier.removeListener(_updateMeals);
     _db.timelineNotifier.removeListener(_updateTimeline);
     _soundWaveController.dispose();
+    _entryController.dispose();
     super.dispose();
   }
 
@@ -230,6 +240,18 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     final totalCount = _tasks.length;
     final completedCount = _tasks.where((t) => t.done).length;
     final progressPct = totalCount > 0 ? (completedCount / totalCount) : 0.0;
+
+    // Wrap whole content in entry animation
+    return FadeTransition(
+      opacity: _entryFade,
+      child: SlideTransition(
+        position: _entrySlide,
+        child: _buildContent(totalCount, completedCount, progressPct),
+      ),
+    );
+  }
+
+  Widget _buildContent(int totalCount, int completedCount, double progressPct) {
     final undoneTasks = _tasks.where((t) => !t.done).toList();
     final priorityTasks = undoneTasks.take(4).toList();
     final isOverwhelmed = undoneTasks.length > 5 || DateTime.now().hour >= 20;
@@ -326,66 +348,109 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFF6EDE0), Color(0xFFEDF0EC), Color(0xFFEAF1FA)],
-          stops: [0.0, 0.55, 1.0],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: NestlyGradients.warmSunrise,
         borderRadius: BorderRadius.circular(26),
         border: Border.all(color: Colors.white.withOpacity(0.9)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0F2E261F),
-            blurRadius: 12,
-            offset: Offset(0, 2),
-          )
-        ],
+        boxShadow: NestlyTheme.shadowCard,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _getDynamicGreeting(),
-            style: NestlyTheme.serifHeading(fontSize: 23, color: NestlyColors.primaryDark),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.only(left: 10),
-            decoration: const BoxDecoration(
-              border: Border(left: BorderSide(color: NestlyColors.sage, width: 2.5)),
-            ),
-            child: Text(
-              _getSubGreeting(),
-              style: const TextStyle(
-                fontFamily: NestlyTheme.fontSans,
-                fontSize: 12.5,
-                height: 1.55,
-                color: NestlyColors.textMuted,
-                fontStyle: FontStyle.italic,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _getDynamicGreeting(),
+                      style: NestlyTheme.serifHeading(fontSize: 22, color: NestlyColors.primaryDark),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.only(left: 10),
+                      decoration: const BoxDecoration(
+                        border: Border(left: BorderSide(color: NestlyColors.sage, width: 2.5)),
+                      ),
+                      child: Text(
+                        _getSubGreeting(),
+                        style: const TextStyle(
+                          fontFamily: NestlyTheme.fontSans,
+                          fontSize: 12.5, height: 1.55,
+                          color: NestlyColors.textMuted,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+              // Animated task count badge
+              TweenAnimationBuilder<int>(
+                tween: IntTween(begin: 0, end: total - completed),
+                duration: const Duration(milliseconds: 900),
+                curve: Curves.easeOutCubic,
+                builder: (_, value, __) => Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.75),
+                    border: Border.all(color: NestlyColors.sage.withOpacity(0.3), width: 2),
+                    boxShadow: NestlyTheme.shadowXs,
+                  ),
+                  alignment: Alignment.center,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '$value',
+                        style: const TextStyle(
+                          fontFamily: NestlyTheme.fontSans,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: NestlyColors.primaryDark,
+                          height: 1.0,
+                        ),
+                      ),
+                      const Text(
+                        'left',
+                        style: TextStyle(
+                          fontFamily: NestlyTheme.fontSans,
+                          fontSize: 9,
+                          color: NestlyColors.textSubtle,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
-          // Progress bar
+          // Animated progress bar
           Row(
             children: [
               Expanded(
-                child: Container(
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.65),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                  alignment: Alignment.centerLeft,
-                  child: FractionallySizedBox(
-                    widthFactor: progressPct,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [NestlyColors.sage, NestlyColors.sageDark],
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(99),
+                  child: Container(
+                    height: 6,
+                    color: Colors.white.withOpacity(0.55),
+                    alignment: Alignment.centerLeft,
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0.0, end: progressPct),
+                      duration: const Duration(milliseconds: 900),
+                      curve: Curves.easeOutCubic,
+                      builder: (_, v, __) => FractionallySizedBox(
+                        widthFactor: v,
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(colors: [NestlyColors.sage, NestlyColors.sageDark]),
+                          ),
                         ),
-                        borderRadius: BorderRadius.circular(99),
                       ),
                     ),
                   ),
@@ -396,13 +461,12 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                 '$completed/$total done',
                 style: const TextStyle(
                   fontFamily: NestlyTheme.fontSans,
-                  fontSize: 11.0,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 11.0, fontWeight: FontWeight.w700,
                   color: NestlyColors.sageDark,
                 ),
               ),
             ],
-          )
+          ),
         ],
       ),
     );
@@ -814,89 +878,96 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
+        Row(
           children: [
-            Icon(Icons.auto_awesome, color: NestlyColors.accent, size: 11),
-            SizedBox(width: 6),
-            Text(
-              'AI Recommendations',
-              style: TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 11, fontWeight: FontWeight.bold, color: NestlyColors.textMuted, letterSpacing: 0.06),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                gradient: NestlyGradients.accentWarm,
+                borderRadius: BorderRadius.circular(NestlyTheme.radiusFull),
+                border: Border.all(color: NestlyColors.accent.withOpacity(0.2)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.auto_awesome, color: NestlyColors.accent, size: 10),
+                  const SizedBox(width: 5),
+                  Text('AI INSIGHTS', style: NestlyTheme.labelCaps(color: NestlyColors.accentDeep)),
+                ],
+              ),
             ),
           ],
         ),
         const SizedBox(height: 10),
         SizedBox(
-          height: 154,
+          height: 160,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
             itemCount: _aiTips.length,
             itemBuilder: (context, index) {
               final tip = _aiTips[index];
-              return Container(
-                width: 290,
-                margin: const EdgeInsets.only(right: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFF9EEE0), Color(0xFFFFFEFB)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: NestlyColors.accent.withOpacity(0.18)),
-                  boxShadow: const [
-                    BoxShadow(color: Color(0x05D9844A), blurRadius: 20, offset: Offset(0, 4))
-                  ],
+              return TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.0, end: 1.0),
+                duration: Duration(milliseconds: 400 + index * 120),
+                curve: Curves.easeOutCubic,
+                builder: (_, v, child) => Opacity(
+                  opacity: v,
+                  child: Transform.translate(offset: Offset(20 * (1 - v), 0), child: child),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(tip['icon']!, style: const TextStyle(fontSize: 22)),
-                    const SizedBox(height: 4),
-                    Text(
-                      tip['title']!,
-                      style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 13, fontWeight: FontWeight.bold, color: NestlyColors.primaryDark),
-                    ),
-                    const SizedBox(height: 2),
-                    Expanded(
-                      child: Text(
-                        tip['description']!,
-                        style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 11, color: NestlyColors.textMuted, height: 1.4),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                child: Container(
+                  width: 280,
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: NestlyColors.bgCard,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: NestlyColors.accent.withOpacity(0.15)),
+                    boxShadow: NestlyTheme.shadowCard,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(tip['icon']!, style: const TextStyle(fontSize: 22)),
+                          const Spacer(),
+                          GestureDetector(
+                            onTap: () => _dismissTip(tip['id']),
+                            child: const Icon(Icons.close, size: 13, color: NestlyColors.textSubtle),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        ElevatedButton(
-                          onPressed: tip['action'],
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: NestlyColors.primary,
-                            foregroundColor: const Color(0xFFF8F3EE),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            textStyle: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 10.5, fontWeight: FontWeight.w600),
-                            elevation: 0,
-                          ),
-                          child: Text(tip['actionText']!),
+                      const SizedBox(height: 6),
+                      Text(
+                        tip['title']!,
+                        style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 13, fontWeight: FontWeight.bold, color: NestlyColors.primaryDark),
+                      ),
+                      const SizedBox(height: 3),
+                      Expanded(
+                        child: Text(
+                          tip['description']!,
+                          style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 11, color: NestlyColors.textMuted, height: 1.45),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
                         ),
-                        const SizedBox(width: 8),
-                        TextButton(
-                          onPressed: () => _dismissTip(tip['id']),
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: const Text('Dismiss', style: TextStyle(color: NestlyColors.textSubtle, fontSize: 10.5, fontWeight: FontWeight.w600)),
-                        )
-                      ],
-                    )
-                  ],
+                      ),
+                      const SizedBox(height: 8),
+                      ElevatedButton(
+                        onPressed: tip['action'],
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: NestlyColors.primaryDark,
+                          foregroundColor: NestlyColors.textOnDark,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                          minimumSize: const Size(double.infinity, 32),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          textStyle: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 10.5, fontWeight: FontWeight.w700),
+                          elevation: 0,
+                        ),
+                        child: Text(tip['actionText']!),
+                      ),
+                    ],
+                  ),
                 ),
               );
             },
@@ -1079,11 +1150,13 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                 final act = _timeline[index];
                 final isLast = index == _timeline.length - 1;
 
-                Color avatarColor = NestlyColors.primaryLight;
+                List<Color> avatarGrad = [NestlyColors.primaryLight, NestlyColors.primary];
                 if (act.user.toLowerCase().contains('mom')) {
-                  avatarColor = NestlyColors.sage;
+                  avatarGrad = [NestlyColors.sage, NestlyColors.sageDark];
                 } else if (act.user.toLowerCase().contains('dad')) {
-                  avatarColor = NestlyColors.sky;
+                  avatarGrad = [NestlyColors.sky, NestlyColors.skyDark];
+                } else if (act.user.toLowerCase().contains('nan') || act.user.toLowerCase().contains('grand')) {
+                  avatarGrad = [NestlyColors.lavender, NestlyColors.lavender];
                 }
 
                 return Container(
@@ -1100,16 +1173,21 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                   child: Row(
                     children: [
                       Container(
-                        width: 28,
-                        height: 28,
+                        width: 32,
+                        height: 32,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: avatarColor,
+                          gradient: LinearGradient(
+                            colors: avatarGrad,
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: NestlyTheme.shadowXs,
                         ),
                         alignment: Alignment.center,
                         child: Text(
                           act.user.isNotEmpty ? act.user[0].toUpperCase() : 'U',
-                          style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                          style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                       ),
                       const SizedBox(width: 10),
