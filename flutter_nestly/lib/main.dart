@@ -125,101 +125,45 @@ class _NestlyAppContainerState extends State<NestlyAppContainer> {
     final user = _db.userNotifier.value;
     final profile = _db.profileNotifier.value;
 
-    // Outer backdrop: Elegant dark gradient matching body CSS
     return Scaffold(
-      backgroundColor: const Color(0xFF16110D),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(-0.4, -0.8),
-            radius: 1.2,
-            colors: [
-              Color(0xFF2A1C14),
-              Color(0xFF0D0A08),
-              Color(0xFF111009),
+      backgroundColor: NestlyColors.bgBase,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 768; // Tablet breakpoint
+
+          Widget mainWidget;
+
+          if (user == null) {
+            mainWidget = AuthScreen(
+              onAuthComplete: (u) => _db.saveUser(u),
+            );
+          } else if (profile == null || !profile.onboarded) {
+            mainWidget = OnboardingScreen(
+              user: user,
+              onOnboardingComplete: (p) => _db.saveProfile(p),
+            );
+          } else if (_simplifyMode) {
+            mainWidget = SimplifyScreen(
+              user: user,
+              profile: profile,
+              onExit: () => setState(() => _simplifyMode = false),
+            );
+          } else {
+            mainWidget = _buildResponsiveScaffold(user, profile, isWide);
+          }
+
+          return Stack(
+            children: [
+              mainWidget,
+              if (_syncToastMessage != null) _buildSyncToast(_syncToastMessage!),
             ],
-            stops: [0.0, 0.55, 1.0],
-          ),
-        ),
-        child: Center(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // Phone frame simulation constraints on wide screens
-              final isWide = constraints.maxWidth > 480 && constraints.maxHeight > 500;
-              final width = isWide ? 412.0 : constraints.maxWidth;
-              final height = isWide ? 896.0 : constraints.maxHeight;
-
-              Widget mainWidget;
-
-              if (user == null) {
-                mainWidget = AuthScreen(
-                  onAuthComplete: (u) => _db.saveUser(u),
-                );
-              } else if (profile == null || !profile.onboarded) {
-                mainWidget = OnboardingScreen(
-                  user: user,
-                  onOnboardingComplete: (p) => _db.saveProfile(p),
-                );
-              } else if (_simplifyMode) {
-                mainWidget = SimplifyScreen(
-                  user: user,
-                  profile: profile,
-                  onExit: () => setState(() => _simplifyMode = false),
-                );
-              } else {
-                mainWidget = _buildTabScaffold(user, profile);
-              }
-
-              // Stack notification toasts on top of the screen content
-              Widget screenWithToast = Stack(
-                children: [
-                  mainWidget,
-                  if (_syncToastMessage != null) _buildSyncToast(_syncToastMessage!),
-                ],
-              );
-
-              if (isWide) {
-                // Return phone frame simulation wrapper
-                return Container(
-                  width: width,
-                  height: height,
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    color: _simplifyMode ? NestlyColors.simplifyBgBase : NestlyColors.bgBase,
-                    borderRadius: BorderRadius.circular(50.0),
-                    border: Border.all(color: const Color(0xFF1A130E), width: 10.0),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black87,
-                        blurRadius: 100,
-                        spreadRadius: 0,
-                        offset: Offset(0, 40),
-                      ),
-                      BoxShadow(
-                        color: Colors.black54,
-                        blurRadius: 32,
-                        spreadRadius: 0,
-                        offset: Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: screenWithToast,
-                );
-              } else {
-                return SizedBox(
-                  width: width,
-                  height: height,
-                  child: screenWithToast,
-                );
-              }
-            },
-          ),
-        ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildTabScaffold(NestlyUser user, OnboardingProfile profile) {
+  Widget _buildResponsiveScaffold(NestlyUser user, OnboardingProfile profile, bool isWide) {
     Widget activeView;
     switch (_activeTab) {
       case 'dashboard':
@@ -254,35 +198,98 @@ class _NestlyAppContainerState extends State<NestlyAppContainer> {
     final bgCard = NestlyColors.getBgCard(isSimplify);
     final border = NestlyColors.getBorder(isSimplify);
 
-    return Scaffold(
-      backgroundColor: NestlyColors.getBgBase(isSimplify),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 12.0),
-          child: activeView,
+    if (isWide) {
+      // Tablet / Desktop Layout using NavigationRail
+      return Scaffold(
+        backgroundColor: NestlyColors.getBgBase(isSimplify),
+        body: Row(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                border: Border(right: BorderSide(color: border, width: 1.0)),
+              ),
+              child: NavigationRail(
+                backgroundColor: bgCard.withOpacity(0.95),
+                selectedIndex: ['dashboard', 'plan', 'meals', 'chat', 'logout'].indexOf(_activeTab),
+                onDestinationSelected: (int index) {
+                  final tabs = ['dashboard', 'plan', 'meals', 'chat', 'logout'];
+                  if (tabs[index] == 'logout') {
+                    _showLogoutDialog();
+                  } else {
+                    _handleTabSelect(tabs[index]);
+                  }
+                },
+                labelType: NavigationRailLabelType.all,
+                selectedLabelTextStyle: TextStyle(
+                  fontFamily: NestlyTheme.fontSans,
+                  fontSize: 11.0,
+                  fontWeight: FontWeight.w700,
+                  color: primaryColor,
+                  letterSpacing: -0.01,
+                ),
+                unselectedLabelTextStyle: TextStyle(
+                  fontFamily: NestlyTheme.fontSans,
+                  fontSize: 11.0,
+                  fontWeight: FontWeight.w500,
+                  color: textMuted,
+                  letterSpacing: -0.01,
+                ),
+                selectedIconTheme: IconThemeData(color: primaryColor, size: 24),
+                unselectedIconTheme: IconThemeData(color: textMuted, size: 24),
+                destinations: const [
+                  NavigationRailDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: Text('Home')),
+                  NavigationRailDestination(icon: Icon(Icons.playlist_add_check), selectedIcon: Icon(Icons.playlist_add_check), label: Text('Plan')),
+                  NavigationRailDestination(icon: Icon(Icons.restaurant_outlined), selectedIcon: Icon(Icons.restaurant), label: Text('Meals')),
+                  NavigationRailDestination(icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome), label: Text('AI')),
+                  NavigationRailDestination(icon: Icon(Icons.logout_outlined), selectedIcon: Icon(Icons.logout), label: Text('Reset')),
+                ],
+              ),
+            ),
+            Expanded(
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+                  child: activeView,
+                ),
+              ),
+            ),
+          ],
         ),
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: bgCard.withOpacity(0.95),
-          border: Border(top: BorderSide(color: border, width: 1.0)),
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: SafeArea(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildNavItem('dashboard', Icons.home_outlined, Icons.home, 'Home', primaryColor, textMuted),
-              _buildNavItem('plan', Icons.playlist_add_check, Icons.playlist_add_check, 'Plan', primaryColor, textMuted),
-              _buildNavItem('meals', Icons.restaurant_outlined, Icons.restaurant, 'Meals', primaryColor, textMuted),
-              _buildNavItem('chat', Icons.auto_awesome_outlined, Icons.auto_awesome, 'AI', primaryColor, textMuted),
-              _buildNavItem('logout', Icons.logout_outlined, Icons.logout, 'Reset', primaryColor, textMuted),
-            ],
+      );
+    } else {
+      // Mobile Layout using BottomNavigationBar
+      return Scaffold(
+        backgroundColor: NestlyColors.getBgBase(isSimplify),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 12.0),
+            child: activeView,
           ),
         ),
-      ),
-    );
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: bgCard.withOpacity(0.95),
+            border: Border(top: BorderSide(color: border, width: 1.0)),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: SafeArea(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavItem('dashboard', Icons.home_outlined, Icons.home, 'Home', primaryColor, textMuted),
+                _buildNavItem('plan', Icons.playlist_add_check, Icons.playlist_add_check, 'Plan', primaryColor, textMuted),
+                _buildNavItem('meals', Icons.restaurant_outlined, Icons.restaurant, 'Meals', primaryColor, textMuted),
+                _buildNavItem('chat', Icons.auto_awesome_outlined, Icons.auto_awesome, 'AI', primaryColor, textMuted),
+                _buildNavItem('logout', Icons.logout_outlined, Icons.logout, 'Reset', primaryColor, textMuted),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
   }
+
+
 
   Widget _buildNavItem(
     String tabId,

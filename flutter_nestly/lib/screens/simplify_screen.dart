@@ -397,23 +397,28 @@ class _SimplifyScreenState extends State<SimplifyScreen> {
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildTopBar(),
-              const SizedBox(height: 16),
-              Expanded(
-                child: _activeMode == null
-                    ? _buildLandingView()
-                    : _activeMode == 'overwhelm'
-                        ? _buildOverwhelmView()
-                        : _activeMode == 'low-energy'
-                            ? _buildLowEnergyView()
-                            : _buildBreathingView(),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildTopBar(),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: _activeMode == null
+                        ? _buildLandingView()
+                        : _activeMode == 'overwhelm'
+                            ? _buildOverwhelmView()
+                            : _activeMode == 'low-energy'
+                                ? _buildLowEnergyView()
+                                : _buildBreathingView(),
+                  ),
+                  const SizedBox(height: 14),
+                  _buildReturnButton(),
+                ],
               ),
-              const SizedBox(height: 14),
-              _buildReturnButton(),
-            ],
+            ),
           ),
         ),
       ),

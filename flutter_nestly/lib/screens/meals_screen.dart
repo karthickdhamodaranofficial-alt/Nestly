@@ -298,17 +298,93 @@ class _MealsScreenState extends State<MealsScreen> {
   Widget build(BuildContext context) {
     final pendingCount = _shoppingList.where((i) => !i.done).length;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildHeader(),
-        const SizedBox(height: 12),
-        _buildSubTabBar(pendingCount),
-        const SizedBox(height: 12),
-        Expanded(
-          child: _activeSubTab == 'planner' ? _buildPlannerTab() : _buildShoppingTab(),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 768; // Tablet breakpoint
+
+        if (isWide) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(),
+              const SizedBox(height: 24),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: Container(
+                        padding: const EdgeInsets.only(right: 16),
+                        decoration: const BoxDecoration(
+                          border: Border(right: BorderSide(color: NestlyColors.border)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Weekly Menu',
+                              style: NestlyTheme.serifHeading(fontSize: 18, color: NestlyColors.primaryDark),
+                            ),
+                            const SizedBox(height: 12),
+                            Expanded(child: _buildPlannerTab()),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 1,
+                      child: Container(
+                        padding: const EdgeInsets.only(left: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'Grocery',
+                                  style: NestlyTheme.serifHeading(fontSize: 18, color: NestlyColors.primaryDark),
+                                ),
+                                if (pendingCount > 0) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                    decoration: BoxDecoration(color: NestlyColors.accent, borderRadius: BorderRadius.circular(99)),
+                                    child: Text(
+                                      '$pendingCount',
+                                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                    ),
+                                  )
+                                ]
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Expanded(child: _buildShoppingTab()),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }
+
+        // Mobile Layout
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildHeader(),
+            const SizedBox(height: 12),
+            _buildSubTabBar(pendingCount),
+            const SizedBox(height: 12),
+            Expanded(
+              child: _activeSubTab == 'planner' ? _buildPlannerTab() : _buildShoppingTab(),
+            ),
+          ],
+        );
+      },
     );
   }
 

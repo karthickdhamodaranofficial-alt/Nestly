@@ -234,37 +234,91 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     final priorityTasks = undoneTasks.take(4).toList();
     final isOverwhelmed = undoneTasks.length > 5 || DateTime.now().hour >= 20;
 
-    return ListView(
-      physics: const BouncingScrollPhysics(),
-      children: [
-        _buildGreetingBanner(progressPct, completedCount, totalCount),
-        const SizedBox(height: 12),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 768; // Tablet breakpoint
 
-        if (isOverwhelmed) ...[
-          _buildOverwhelmAlert(),
-          const SizedBox(height: 12),
-        ],
+        if (isWide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left Column
+              Expanded(
+                flex: 5,
+                child: ListView(
+                  physics: const BouncingScrollPhysics(),
+                  children: [
+                    _buildGreetingBanner(progressPct, completedCount, totalCount),
+                    const SizedBox(height: 16),
+                    if (isOverwhelmed) ...[
+                      _buildOverwhelmAlert(),
+                      const SizedBox(height: 16),
+                    ],
+                    _buildPrioritiesSection(priorityTasks),
+                    const SizedBox(height: 16),
+                    _buildSoundscapeCard(),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 24),
+              // Right Column
+              Expanded(
+                flex: 4,
+                child: ListView(
+                  physics: const BouncingScrollPhysics(),
+                  children: [
+                    _buildWeeklyLoadSection(),
+                    const SizedBox(height: 16),
+                    if (_aiTips.isNotEmpty) ...[
+                      _buildAiRecommendationsSection(),
+                      const SizedBox(height: 16),
+                    ],
+                    _buildScheduleDinnerGrid(),
+                    const SizedBox(height: 16),
+                    _buildFamilyFeedSection(),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }
 
-        _buildPrioritiesSection(priorityTasks),
-        const SizedBox(height: 12),
+        // Mobile Layout (Single Column)
+        return ListView(
+          physics: const BouncingScrollPhysics(),
+          children: [
+            _buildGreetingBanner(progressPct, completedCount, totalCount),
+            const SizedBox(height: 12),
 
-        _buildSoundscapeCard(),
-        const SizedBox(height: 12),
+            if (isOverwhelmed) ...[
+              _buildOverwhelmAlert(),
+              const SizedBox(height: 12),
+            ],
 
-        _buildWeeklyLoadSection(),
-        const SizedBox(height: 12),
+            _buildPrioritiesSection(priorityTasks),
+            const SizedBox(height: 12),
 
-        if (_aiTips.isNotEmpty) ...[
-          _buildAiRecommendationsSection(),
-          const SizedBox(height: 12),
-        ],
+            _buildSoundscapeCard(),
+            const SizedBox(height: 12),
 
-        _buildScheduleDinnerGrid(),
-        const SizedBox(height: 12),
+            _buildWeeklyLoadSection(),
+            const SizedBox(height: 12),
 
-        _buildFamilyFeedSection(),
-        const SizedBox(height: 24),
-      ],
+            if (_aiTips.isNotEmpty) ...[
+              _buildAiRecommendationsSection(),
+              const SizedBox(height: 12),
+            ],
+
+            _buildScheduleDinnerGrid(),
+            const SizedBox(height: 12),
+
+            _buildFamilyFeedSection(),
+            const SizedBox(height: 24),
+          ],
+        );
+      },
     );
   }
 

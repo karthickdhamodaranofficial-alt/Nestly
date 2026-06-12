@@ -118,21 +118,62 @@ class _PlanScreenState extends State<PlanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildHeader(),
-        const SizedBox(height: 12),
-        _buildTabSwitcher(),
-        const SizedBox(height: 12),
-        Expanded(
-          child: _activeTab == 'tasks' ? _buildTasksTab() : _buildCalendarTab(),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 768; // Tablet breakpoint
+
+        if (isWide) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(isWide: true),
+              const SizedBox(height: 24),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: Container(
+                        padding: const EdgeInsets.only(right: 12),
+                        decoration: const BoxDecoration(
+                          border: Border(right: BorderSide(color: NestlyColors.border)),
+                        ),
+                        child: _buildTasksTab(),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 1,
+                      child: Container(
+                        padding: const EdgeInsets.only(left: 12),
+                        child: _buildCalendarTab(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }
+
+        // Mobile Layout
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildHeader(isWide: false),
+            const SizedBox(height: 12),
+            _buildTabSwitcher(),
+            const SizedBox(height: 12),
+            Expanded(
+              child: _activeTab == 'tasks' ? _buildTasksTab() : _buildCalendarTab(),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader({required bool isWide}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -147,27 +188,63 @@ class _PlanScreenState extends State<PlanScreen> {
             ),
           ],
         ),
-        ElevatedButton.icon(
-          onPressed: () {
-            if (_activeTab == 'tasks') {
-              _showTaskFormSheet(null);
-            } else {
-              _showEventFormSheet();
-            }
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: NestlyColors.primary,
-            foregroundColor: const Color(0xFFF8F3EE),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            elevation: 2,
-          ),
-          icon: const Icon(Icons.add, size: 14),
-          label: Text(_activeTab == 'tasks' ? 'Add Task' : 'Add Event', style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 12, fontWeight: FontWeight.bold)),
-        )
+        if (isWide)
+          Row(
+            children: [
+              ElevatedButton.icon(
+                onPressed: () => _showTaskFormSheet(null),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: NestlyColors.bgCard,
+                  foregroundColor: NestlyColors.primaryDark,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: const BorderSide(color: NestlyColors.border),
+                  ),
+                  elevation: 0,
+                ),
+                icon: const Icon(Icons.add, size: 14),
+                label: const Text('Add Task', style: TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: () => _showEventFormSheet(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: NestlyColors.primary,
+                  foregroundColor: const Color(0xFFF8F3EE),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  elevation: 2,
+                ),
+                icon: const Icon(Icons.add, size: 14),
+                label: const Text('Add Event', style: TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          )
+        else
+          ElevatedButton.icon(
+            onPressed: () {
+              if (_activeTab == 'tasks') {
+                _showTaskFormSheet(null);
+              } else {
+                _showEventFormSheet();
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: NestlyColors.primary,
+              foregroundColor: const Color(0xFFF8F3EE),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              elevation: 2,
+            ),
+            icon: const Icon(Icons.add, size: 14),
+            label: Text(_activeTab == 'tasks' ? 'Add Task' : 'Add Event', style: const TextStyle(fontFamily: NestlyTheme.fontSans, fontSize: 12, fontWeight: FontWeight.bold)),
+          )
       ],
     );
   }
+
+
 
   Widget _buildTabSwitcher() {
     final leftCount = _tasks.where((t) => !t.done).length;

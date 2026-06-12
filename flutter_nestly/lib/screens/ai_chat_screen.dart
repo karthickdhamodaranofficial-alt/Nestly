@@ -145,28 +145,33 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 800),
+        child: Stack(
           children: [
-            _buildHeader(),
-            const SizedBox(height: 12),
-            if (_showSettings) ...[
-              _buildSettingsCard(),
-              const SizedBox(height: 12),
-            ],
-            Expanded(
-              child: _buildMessagesList(),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildHeader(),
+                const SizedBox(height: 12),
+                if (_showSettings) ...[
+                  _buildSettingsCard(),
+                  const SizedBox(height: 12),
+                ],
+                Expanded(
+                  child: _buildMessagesList(),
+                ),
+                const SizedBox(height: 8),
+                _buildQuickPromptsRow(),
+                const SizedBox(height: 8),
+                _buildInputRow(),
+              ],
             ),
-            const SizedBox(height: 8),
-            _buildQuickPromptsRow(),
-            const SizedBox(height: 8),
-            _buildInputRow(),
+            if (_showFacts) _buildFactsOverlay(),
           ],
         ),
-        if (_showFacts) _buildFactsOverlay(),
-      ],
+      ),
     );
   }
 
