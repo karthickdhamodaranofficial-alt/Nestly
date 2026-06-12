@@ -145,7 +145,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             children: [
               _buildProgressHeader(),
               const SizedBox(height: 20),
-              _buildStepContent(),
+              AnimatedSwitcher(
+                duration: NestlyTheme.transitionSmooth,
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0.05, 0),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  );
+                },
+                child: KeyedSubtree(
+                  key: ValueKey<int>(_step),
+                  child: _buildStepContent(),
+                ),
+              ),
               const SizedBox(height: 24),
               _buildNavigationButtons(),
             ],

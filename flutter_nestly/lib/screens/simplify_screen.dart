@@ -386,42 +386,50 @@ class _SimplifyScreenState extends State<SimplifyScreen> {
   Widget build(BuildContext context) {
     final gradient = _modeGradients[_activeMode] ?? _defaultGradient;
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: gradient,
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+    return Stack(
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 800),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: gradient,
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+          ),
         ),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 600),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildTopBar(),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: _activeMode == null
-                        ? _buildLandingView()
-                        : _activeMode == 'overwhelm'
-                            ? _buildOverwhelmView()
-                            : _activeMode == 'low-energy'
-                                ? _buildLowEnergyView()
-                                : _buildBreathingView(),
-                  ),
-                  const SizedBox(height: 14),
-                  _buildReturnButton(),
-                ],
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 600),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildTopBar(),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: AnimatedSwitcher(
+                        duration: NestlyTheme.transitionSmooth,
+                        child: _activeMode == null
+                            ? KeyedSubtree(key: const ValueKey('landing'), child: _buildLandingView())
+                            : _activeMode == 'overwhelm'
+                                ? KeyedSubtree(key: const ValueKey('overwhelm'), child: _buildOverwhelmView())
+                                : _activeMode == 'low-energy'
+                                    ? KeyedSubtree(key: const ValueKey('low'), child: _buildLowEnergyView())
+                                    : KeyedSubtree(key: const ValueKey('breathe'), child: _buildBreathingView()),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _buildReturnButton(),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ),
+      ],
     );
   }
 

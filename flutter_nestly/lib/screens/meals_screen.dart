@@ -380,7 +380,14 @@ class _MealsScreenState extends State<MealsScreen> {
             _buildSubTabBar(pendingCount),
             const SizedBox(height: 12),
             Expanded(
-              child: _activeSubTab == 'planner' ? _buildPlannerTab() : _buildShoppingTab(),
+              child: AnimatedSwitcher(
+                duration: NestlyTheme.transitionSmooth,
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: _activeSubTab == 'planner'
+                    ? KeyedSubtree(key: const ValueKey('planner'), child: _buildPlannerTab())
+                    : KeyedSubtree(key: const ValueKey('shopping'), child: _buildShoppingTab()),
+              ),
             ),
           ],
         );
@@ -415,7 +422,8 @@ class _MealsScreenState extends State<MealsScreen> {
           Expanded(
             child: GestureDetector(
               onTap: () => setState(() => _activeSubTab = 'planner'),
-              child: Container(
+              child: AnimatedContainer(
+                duration: NestlyTheme.transitionFast,
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
                   color: _activeSubTab == 'planner' ? NestlyColors.primaryDark : Colors.transparent,
@@ -444,7 +452,8 @@ class _MealsScreenState extends State<MealsScreen> {
           Expanded(
             child: GestureDetector(
               onTap: () => setState(() => _activeSubTab = 'shopping'),
-              child: Container(
+              child: AnimatedContainer(
+                duration: NestlyTheme.transitionFast,
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
                   color: _activeSubTab == 'shopping' ? NestlyColors.primaryDark : Colors.transparent,
@@ -884,47 +893,79 @@ class _MealsScreenState extends State<MealsScreen> {
                               padding: const EdgeInsets.only(left: 12.0, right: 12.0, bottom: 12.0),
                               child: Column(
                                 children: items.map((item) {
-                                  return Container(
-                                    margin: const EdgeInsets.only(top: 6.0),
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                    decoration: BoxDecoration(
-                                      color: item.done ? NestlyColors.sage.withOpacity(0.06) : NestlyColors.bgCard,
-                                      borderRadius: BorderRadius.circular(13),
-                                      border: Border.all(color: item.done ? NestlyColors.sage.withOpacity(0.15) : NestlyColors.border),
+                                  return Dismissible(
+                                    key: Key(item.id),
+                                    direction: DismissDirection.horizontal,
+                                    background: Container(
+                                      margin: const EdgeInsets.only(top: 6.0),
+                                      decoration: BoxDecoration(
+                                        color: NestlyColors.sage,
+                                        borderRadius: BorderRadius.circular(13),
+                                      ),
+                                      alignment: Alignment.centerLeft,
+                                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                                      child: const Icon(Icons.check_circle, color: Colors.white, size: 20),
                                     ),
-                                    child: Row(
-                                      children: [
-                                        SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: Checkbox(
-                                            value: item.done,
-                                            activeColor: NestlyColors.sage,
-                                            side: const BorderSide(color: NestlyColors.borderStrong),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-                                            onChanged: (_) => _toggleGrocery(item),
-                                          ),
+                                    secondaryBackground: Container(
+                                      margin: const EdgeInsets.only(top: 6.0),
+                                      decoration: BoxDecoration(
+                                        color: NestlyColors.danger,
+                                        borderRadius: BorderRadius.circular(13),
+                                      ),
+                                      alignment: Alignment.centerRight,
+                                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                                      child: const Icon(Icons.delete_outline, color: Colors.white, size: 20),
+                                    ),
+                                    confirmDismiss: (dir) async {
+                                      if (dir == DismissDirection.startToEnd) {
+                                        _toggleGrocery(item);
+                                        return false; // don't remove, just toggle
+                                      } else {
+                                        _deleteGrocery(item);
+                                        return false;
+                                      }
+                                    },
+                                    child: AnimatedOpacity(
+                                      duration: NestlyTheme.transitionSmooth,
+                                      opacity: item.done ? 0.6 : 1.0,
+                                      child: Container(
+                                        margin: const EdgeInsets.only(top: 6.0),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: item.done ? NestlyColors.sage.withOpacity(0.06) : NestlyColors.bgCard,
+                                          borderRadius: BorderRadius.circular(13),
+                                          border: Border.all(color: item.done ? NestlyColors.sage.withOpacity(0.15) : NestlyColors.border),
                                         ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Text(
-                                            item.title,
-                                            style: TextStyle(
-                                              fontFamily: NestlyTheme.fontSans,
-                                              fontSize: 13,
-                                              color: NestlyColors.textMain,
-                                              decoration: item.done ? TextDecoration.lineThrough : null,
-                                              fontWeight: item.done ? FontWeight.normal : FontWeight.bold,
+                                        child: Row(
+                                          children: [
+                                            GestureDetector(
+                                              onTap: () => _toggleGrocery(item),
+                                              child: AnimatedSwitcher(
+                                                duration: NestlyTheme.transitionFast,
+                                                child: Icon(
+                                                  item.done ? Icons.check_circle : Icons.circle_outlined,
+                                                  key: ValueKey(item.done),
+                                                  color: item.done ? NestlyColors.sage : NestlyColors.borderStrong,
+                                                  size: 20,
+                                                ),
+                                              ),
                                             ),
-                                          ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Text(
+                                                item.title,
+                                                style: TextStyle(
+                                                  fontFamily: NestlyTheme.fontSans,
+                                                  fontSize: 13,
+                                                  color: NestlyColors.textMain,
+                                                  decoration: item.done ? TextDecoration.lineThrough : null,
+                                                  fontWeight: item.done ? FontWeight.normal : FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete_outline, size: 13, color: NestlyColors.danger),
-                                          onPressed: () => _deleteGrocery(item),
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
-                                        )
-                                      ],
+                                      ),
                                     ),
                                   );
                                 }).toList(),

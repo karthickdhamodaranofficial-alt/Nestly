@@ -942,3 +942,35 @@ h1, h2, h3, h4 { color: var(--color-text-main); font-weight: 600; }
   0%   { opacity:0; transform: translateY(-12px) scale(0.95); }
   100% { opacity:1; transform: translateY(0) scale(1); }
 }
+
+/* ════════════════════════════════════════
+   AI CHAT SPECIFIC ANIMATIONS
+════════════════════════════════════════ */
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes pulse {
+  0% { transform: translateY(-50%) scale(1); opacity: 0.8; }
+  50% { transform: translateY(-50%) scale(1.1); opacity: 1; filter: drop-shadow(0 0 8px var(--color-accent)); }
+  100% { transform: translateY(-50%) scale(1); opacity: 0.8; }
+}
+
+.cursor-blink {
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.hover-lift {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.05);
+}
